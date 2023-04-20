@@ -218,7 +218,7 @@ int main(int argc, char *argv[]){
 	}
 	init_pattern(&p);
 	perform_iterations(&p);
-//	print_pattern_hvscaled(&p, 3, 1);
+	print_pattern_hvscaled(&p, 3, 1);
 	free_pattern(&p);
 	return 0;
 }
