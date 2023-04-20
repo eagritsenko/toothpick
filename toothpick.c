@@ -16,8 +16,9 @@
 
 struct queue {
 	size_t *data;
-	size_t front;
-	size_t end;
+	size_t *front;
+	size_t *end;
+	size_t *data_end;
 	size_t capacity;
 };
 
@@ -38,19 +39,22 @@ ssize_t init_queue(struct queue *q){
 	q->data = malloc(q->capacity * sizeof(size_t));
 	if(!q->data)
 		return -1;
-	q->front = 0;
-	q->end = 0;
+	q->front = q->data;
+	q->end = q->data;
+	q->data_end = q->data + q->capacity;
 	return 0;
 }
 
 void push(struct queue *q, size_t what){
-	q->data[q->end++] = what;
-	q->end %= q->capacity; // make it via if
+	*q->end++ = what;
+	if(q->end == q->data_end)
+		q->end = q->data;
 }
 
 ssize_t pop(struct queue *q){
-	size_t value = q->data[q->front++];
-	q->front %= q->capacity;
+	size_t value = *q->front++;
+	if(q->front == q->data_end)
+		q->front = q->data;
 	return value;
 }
 
@@ -115,35 +119,39 @@ void perform_iterations(struct pattern *p){
 	size_t last_pixel_id = (size_t)p->width * p->height - 1;
 	size_t last_row_id = (size_t)p->width * (p->height - 1);
 	for(size_t i = 0; i < p->iterations; i++){
-		size_t cend = endpoints->end;
-		while(endpoints->front != cend){
-			size_t pos = pop(endpoints);
-			uint8_t current = p->data[pos];
-			switch(current){
-				case 0b0001:
-				case 0b0010:
-					p->data[pos] |= 0b1100;
-					if(pos < last_pixel_id && !p->data[pos + 1])
-						push(endpoints, pos + 1);
-					if(pos < last_pixel_id)
-						p->data[pos + 1] |= 0b0100;
-					if(pos != 0 && !p->data[pos - 1])
-						push(endpoints, pos - 1);
-					if(pos != 0)
-						p->data[pos - 1] |= 0b1000;
-					break;
-				case 0b1000:
-				case 0b0100:
-					p->data[pos] |= 0b0011;
-					if(pos < last_row_id && !p->data[pos + p->width])
-						push(endpoints, pos + p->width);
-					if(pos < last_row_id)
-						p->data[pos + p->width] |= 0b0001;
-					if(pos >= p->width && !p->data[pos - p->width])
-						push(endpoints, pos - p->width);
-					if(pos >= p->width)
-						p->data[pos - p->width] |= 0b0010;
-					break;
+		size_t *cend = endpoints->end;
+		if(p->data[*endpoints->front] & 0b0011){ // manual unswitching; do we need that?
+			while(endpoints->front != cend){
+				size_t pos = pop(endpoints);
+				uint_fast8_t current = p->data[pos];
+				if(current & (current - 1)) // popcnt(current) != 1
+					continue;
+				p->data[pos] |= 0b1100;
+				if(pos < last_pixel_id && !p->data[pos + 1])
+					push(endpoints, pos + 1);
+				if(pos < last_pixel_id)
+					p->data[pos + 1] |= 0b0100;
+				if(pos != 0 && !p->data[pos - 1])
+					push(endpoints, pos - 1);
+				if(pos != 0)
+					p->data[pos - 1] |= 0b1000;
+			}
+		}
+		else{
+			while(endpoints->front != cend){
+				size_t pos = pop(endpoints);
+				uint_fast8_t current = p->data[pos];
+				if(current & (current - 1))
+					continue;
+				p->data[pos] |= 0b0011;
+				if(pos < last_row_id && !p->data[pos + p->width])
+					push(endpoints, pos + p->width);
+				if(pos < last_row_id)
+					p->data[pos + p->width] |= 0b0001;
+				if(pos >= p->width && !p->data[pos - p->width])
+					push(endpoints, pos - p->width);
+				if(pos >= p->width)
+					p->data[pos - p->width] |= 0b0010;
 			}
 		}
 	}
@@ -210,7 +218,7 @@ int main(int argc, char *argv[]){
 	}
 	init_pattern(&p);
 	perform_iterations(&p);
-	print_pattern_hvscaled(&p, 3, 1);
+//	print_pattern_hvscaled(&p, 3, 1);
 	free_pattern(&p);
 	return 0;
 }
