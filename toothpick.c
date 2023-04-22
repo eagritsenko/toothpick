@@ -31,9 +31,9 @@ struct pattern {
 };
 
 char *symbols[] = { " ", "╨", "╥", "║",
-				"╡", "!", "!", "╣",
-				"╞", "!", "!", "╠",
-				"═", "╩", "╦", "╬"};
+			"╡", "!", "!", "╣",
+			"╞", "!", "!", "╠",
+			"═", "╩", "╦", "╬"};
 
 ssize_t init_queue(struct queue *q){
 	q->data = malloc(q->capacity * sizeof(size_t));
@@ -127,14 +127,12 @@ void perform_iterations(struct pattern *p){
 				if(current & (current - 1)) // popcnt(current) != 1
 					continue;
 				p->data[pos] |= 0b1100;
-				if(pos < last_pixel_id && !p->data[pos + 1])
+				if(!p->data[pos + 1])
 					push(endpoints, pos + 1);
-				if(pos < last_pixel_id)
-					p->data[pos + 1] |= 0b0100;
-				if(pos != 0 && !p->data[pos - 1])
+				p->data[pos + 1] |= 0b0100;
+				if(!p->data[pos - 1])
 					push(endpoints, pos - 1);
-				if(pos != 0)
-					p->data[pos - 1] |= 0b1000;
+				p->data[pos - 1] |= 0b1000;
 			}
 		}
 		else{
@@ -144,14 +142,12 @@ void perform_iterations(struct pattern *p){
 				if(current & (current - 1))
 					continue;
 				p->data[pos] |= 0b0011;
-				if(pos < last_row_id && !p->data[pos + p->width])
+				if(!p->data[pos + p->width])
 					push(endpoints, pos + p->width);
-				if(pos < last_row_id)
-					p->data[pos + p->width] |= 0b0001;
-				if(pos >= p->width && !p->data[pos - p->width])
+				p->data[pos + p->width] |= 0b0001;
+				if(!p->data[pos - p->width])
 					push(endpoints, pos - p->width);
-				if(pos >= p->width)
-					p->data[pos - p->width] |= 0b0010;
+				p->data[pos - p->width] |= 0b0010;
 			}
 		}
 	}
@@ -166,30 +162,43 @@ void print_pattern(struct pattern *p){
 }
 
 void print_pattern_hvscaled(struct pattern *p, uint32_t h_length, uint32_t v_length){
-	uint8_t *remembered = malloc(p->width);
-#ifdef __WIN64__
-	SetConsoleOutputCP(65001); // doesn't work for stream redirection in powershell
-	// _setmode(stdout, _O_U8TEXT); // doesn't work at all
-#endif // __WIN64__
+
+	char *row_base = calloc(p->width * (h_length + 1) + 1, 3), *row = row_base; // buffer for the row
+	char *filler_row_base = calloc(p->width * (h_length + 1) + 1, 3), *filler_row = filler_row_base; // buffer for rows used for vertical scaling
 	for(size_t i = 0; i < p->height; i++){
 		for(uint32_t j = 0; j < p->width; j++){
-			fputs(symbols[p->data[i * p->width + j]], stdout);
-			const char *symbol = p->data[i * p->width + j] & 0b1000 ? symbols[0b1100] : symbols[0b0000];
-			remembered[j] = p->data[i * p->width + j] & 0b0010 ? 0b0011 : 0b0000;
-			for(uint32_t k = 0; k < h_length; k++)
-				fputs(symbol, stdout);
-
-		}
-		putc('\n', stdout);
-		if(i < p->height - 1)
-			for(uint32_t j = 0; j < v_length; j++){
-				for(uint32_t k = 0; k < p->width; k++){
-					fputs(symbols[remembered[k]], stdout);
-					for(uint32_t l = 0; l < h_length; l++)
-						putc(' ', stdout);
-				}
-				putc('\n', stdout);
+			uint_fast8_t current = p->data[i * p->width + j];
+			if(current){
+				*((uint32_t *)row) = *(uint32_t *)(symbols[current]); // the box chars we use are just 3 bytes long in UTF-8
+				row += 3;
 			}
+			else
+				*row++ = ' ';
+			if(current & 0b0010){	
+				*((uint32_t *)filler_row) = *(uint32_t *)(symbols[0b0011]);
+				filler_row += 3;
+			}
+			else
+				*filler_row++ = ' ';
+			if(j + 1 < p->width){
+				if(current & 0b1000)
+					for(uint32_t k = 0; k < h_length; k++, row += 3)
+						*(uint32_t *)row = *(uint32_t *)(symbols[0b1100]);
+				else
+					for(uint32_t k = 0; k < h_length; k++)
+						*row++ = ' ';
+				for(uint32_t k = 0; k < h_length; k++)
+					*filler_row++ = ' ';
+			}
+		}
+		*row = '\0';
+		*filler_row = '\0';
+		row = row_base;
+		filler_row = filler_row_base;
+		puts(row);
+		if(i + 1 < p->height)
+			for(int j = 0; j < v_length; j++)
+				puts(filler_row);
 	}
 }
 
